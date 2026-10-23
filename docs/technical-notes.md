@@ -149,16 +149,14 @@ reassembler instead, because some sources split its frames. The patch also:
 - fails the decode when a frame is larger than its input buffer. Upstream
   `CHECK`s the size, which crashes the GPU process.
 - leaves single-plane P010 out of the output formats. Chromium can't lay it
-  out yet: the first decoded 10-bit frame would fail a `CHECK`. The Frame's
-  decoder also gives 10-bit HEVC as NV12 (8-bit).
+  out yet: the first decoded 10-bit frame would fail a `CHECK`. (The
+  Frame's decoder doesn't offer P010 anyway; for 10-bit HEVC it offers only
+  Q10C, see below.)
 - reports a decode error when the decoder can't set up its output (for
   example, no usable output format) or a frame doesn't fit, and fails later
   decodes until the player resets. The decoder reports errors only through
   its decode callbacks, so upstream left playback waiting silently in these
-  cases. Verified 2026-10-23: the
-  Frame's `ffmpeg -c:v hevc_v4l2m2m` decoded 8-bit 1080p and Main 10 4K HEVC
-  test clips on `/dev/video-dec0` with no errors, outputting NV12.
-
+  cases.
 - stops offering HEVC Main 10 and VP9 profile 2 from V4L2 decoders that
   take whole frames (stateful ones, like the Frame's). See below.
 
