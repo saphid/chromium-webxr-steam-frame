@@ -104,6 +104,33 @@ Chromium's GPU process uses ANGLE on OpenGL, which runs on zink over the
 Turnip Vulkan driver (Adreno 750). Chromium's own Vulkan backend stays off;
 that doesn't stop the session. The OpenXR runtime uses Vulkan.
 
+## Video decoding
+
+Most VR180 and 360 video on the web is HEVC (H.265). Chromium on Linux has
+no software HEVC decoder; it decodes HEVC only on a hardware decoder. Without
+one, an HEVC video plays its sound but shows no picture: the element raises
+no error and `currentTime` advances, but `videoWidth` stays 0 and no frames
+are decoded. `canPlayType()` and `MediaSource.isTypeSupported()` report
+HEVC as unsupported, so players that check pick another format, but many VR sites
+serve HEVC without checking.
+
+Verified on 2026-10-23 (BUILD_ID 20261015.6141207) with the Chromium 156
+build, which had no hardware decoder: H.264 (up to 5760 × 2880) and VP9
+played with frames, while HEVC 1080p, HEVC Main 10 4K and HEVC 7680 × 3840
+played sound with 0 decoded frames.
+
+The Frame's decoder is Qualcomm's `iris` V4L2 driver at `/dev/video-dec0`
+(`/dev/video22`), a stateful decoder for H.264, HEVC and VP9 from 128 × 128
+up to 8192 × 8192. The Frame has no VA-API driver. Steam's own browser
+(`steamwebhelper`) runs with `--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode`,
+so Valve uses this decoder too.
+
+So the build sets `use_v4l2_codec = true` and `use_vaapi = false`, the same
+pair as upstream's `linux-v4l2-codec-rel` try builder. On desktop Linux,
+Chromium looks for V4L2 decoders at `/dev/video0` to `/dev/video255`.
+Hardware decoding is off by default in a build without VA-API, so the
+launcher adds `AcceleratedVideoDecoder` to `--enable-features`.
+
 ## Panels and the Steam library
 
 The Frame's compositor (gamescope) gives every Steam app ID its own SteamVR

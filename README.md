@@ -205,6 +205,12 @@ above.
   allows only that one option. It's reported upstream, with the seccomp
   issue below, in
   [utzcoz/chromium-webxr-linux#7](https://github.com/utzcoz/chromium-webxr-linux/issues/7).
+- **Hardware video decoding.** The build decodes video on the Frame's V4L2
+  hardware decoder (`use_v4l2_codec`), and the launcher turns it on with
+  `--enable-features=AcceleratedVideoDecoder`. It's the only HEVC (H.265)
+  decoder Chromium has on Linux, and most VR180/360 video is HEVC. Without
+  it, HEVC video plays its sound but no picture (see
+  [docs/technical-notes.md](docs/technical-notes.md#video-decoding)).
 - **Steam integration.** `frame/steam-shortcut.py` adds the shortcut through
   the Steam client's local DevTools port, the same API the Steam UI uses.
   Steam runs each app as its own panel, so Chromium gets one too.
