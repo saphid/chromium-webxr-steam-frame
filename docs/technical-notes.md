@@ -141,13 +141,21 @@ decoder handles VP9: each `DecoderBuffer` goes to the driver as it is.
 That works because `VideoDecoderPipeline` already converts HEVC to Annex B
 (`needs_bitstream_conversion_`), and media playback hands over one whole
 frame per buffer, which stateful drivers need. H.264 goes through a
-reassembler instead, because some sources split its frames. The patch also
-gives HEVC 16 input buffers, as H.264 has, and makes each buffer 16 MiB
-above 4K (upstream allows 4 MiB above 1080p). A frame larger than its buffer
-fails a `CHECK` and crashes the GPU process, and an 8K keyframe can be
-larger than 4 MiB.
+reassembler instead, because some sources split its frames. The patch also:
 
-Not verified on the Frame yet (inferred from the source).
+- gives HEVC 16 input buffers, as H.264 has, and requests 16 MiB buffers
+  above 4K (upstream requests 4 MiB above 1080p, and an 8K keyframe can be
+  larger). The driver may still allocate less.
+- fails the decode when a frame is larger than its input buffer. Upstream
+  `CHECK`s the size, which crashes the GPU process.
+- leaves single-plane P010 out of the output formats. Chromium can't lay it
+  out yet: the first decoded 10-bit frame would fail a `CHECK`. The Frame's
+  decoder also gives 10-bit HEVC as NV12 (8-bit). Verified 2026-10-23: the
+  Frame's `ffmpeg -c:v hevc_v4l2m2m` decoded 8-bit 1080p and Main 10 4K HEVC
+  test clips on `/dev/video-dec0` with no errors, outputting NV12.
+
+The patched Chromium hasn't been run on the Frame yet; the patch is
+inferred from the source.
 
 ## Panels and the Steam library
 
