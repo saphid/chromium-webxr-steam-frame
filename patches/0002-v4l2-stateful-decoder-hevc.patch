@@ -47,7 +47,21 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
    if (!IsInitialized()) {
      DecoderStatus init_result;
      Initialize(
-@@ -516,12 +527,10 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+@@ -476,7 +487,12 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+       decoder_buffer_and_callbacks_.emplace(
+           h264_frame_reassembler_->AssembleAndFlushFragments(),
+           base::DoNothing());
+-      TryAndEnqueueOUTPUTQueueBuffers();
++      if (!TryAndEnqueueOUTPUTQueueBuffers() && failed_) {
++        // The last frame didn't fit; FailPendingDecodes() can't reach this
++        // end-of-stream |decode_cb|, so fail it here.
++        std::move(decode_cb).Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++        return;
++      }
+     }
+ 
+     const bool is_pending_work = !decoder_buffer_and_callbacks_.empty();
+@@ -516,12 +532,10 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
        decoder_buffer_and_callbacks_.push(std::move(a));
      }
  
@@ -63,7 +77,7 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
      decoder_buffer_and_callbacks_.emplace(std::move(buffer),
                                            std::move(decode_cb));
    }
-@@ -592,6 +601,7 @@ void V4L2StatefulVideoDecoder::Reset(base::OnceClosure closure) {
+@@ -592,6 +606,7 @@ void V4L2StatefulVideoDecoder::Reset(base::OnceClosure closure) {
    if (flush_cb_) {
      std::move(flush_cb_).Run(DecoderStatus::Codes::kAborted);
    }
@@ -71,7 +85,7 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
  }
  
  bool V4L2StatefulVideoDecoder::NeedsBitstreamConversion() const {
-@@ -625,8 +635,10 @@ void V4L2StatefulVideoDecoder::ApplyResolutionChange() {
+@@ -625,8 +640,10 @@ void V4L2StatefulVideoDecoder::ApplyResolutionChange() {
    // It's possible that we have been Reset()ed in the interval between receiving
    // the resolution change event in WaitOnceForEvents() (in a background thread)
    // and arriving here from our |client_|. Check if that's the case.
@@ -84,7 +98,7 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
  }
  
  size_t V4L2StatefulVideoDecoder::GetMaxOutputFramePoolSize() const {
-@@ -833,6 +845,13 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
+@@ -833,6 +850,13 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
      if (!candidate_fourcc) {
        continue;  // This is fine: means we don't recognize |candidate_fourcc|.
      }
@@ -98,7 +112,7 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
  
      // TODO(mcasas): Consider what to do when the input bitstream is of higher
      // bit depth: Some drivers (QC?) will support and enumerate both a high bit
-@@ -1166,8 +1185,19 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
+@@ -1166,8 +1190,19 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
        CHECK_EQ(v4l2_buffer->PlanesCount(), 1u);
        uint8_t* dst = static_cast<uint8_t*>(v4l2_buffer->GetPlaneMapping(0));
        auto media_buffer_span = base::span(*media_buffer);
@@ -120,7 +134,7 @@ diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2
        UNSAFE_TODO(
            memcpy(dst, media_buffer_span.data(), media_buffer_span.size()));
        v4l2_buffer->SetPlaneBytesUsed(0, media_buffer_span.size());
-@@ -1189,6 +1219,21 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
+@@ -1189,6 +1224,21 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
    return true;
  }
  
