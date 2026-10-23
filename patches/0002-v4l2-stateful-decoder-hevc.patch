@@ -1,0 +1,54 @@
+diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+--- a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
++++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+@@ -392,12 +392,17 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
+   const auto profile_as_v4l2_fourcc =
+       VideoCodecProfileToV4L2PixFmt(config.profile(), /*slice_based=*/false);
+ 
+-  // Allocate larger |OUTPUT_queue_| buffers for resolutions above 1080p.
++  // Allocate larger |OUTPUT_queue_| buffers for resolutions above 1080p, and
++  // larger still above 4K: an 8K keyframe can exceed 4 MiB, and a frame that
++  // doesn't fit in a buffer fails a CHECK in TryAndEnqueueOUTPUTQueueBuffers().
+   // TODO(hnt): Investigate ways to reduce this size.
+   constexpr size_t kMiB = 1024 * 1024;
+   constexpr int kFullHDNumPixels = 1920 * 1080;
+-  const size_t kInputBufferInMBs =
+-      (config.coded_size().GetArea() <= kFullHDNumPixels) ? 2 : 4;
++  constexpr int k4KNumPixels = 3840 * 2160;
++  const int num_pixels = config.coded_size().GetArea();
++  const size_t kInputBufferInMBs = num_pixels <= kFullHDNumPixels ? 2
++                                   : num_pixels <= k4KNumPixels   ? 4
++                                                                  : 16;
+   const auto v4l2_format = OUTPUT_queue_->SetFormat(
+       profile_as_v4l2_fourcc, gfx::Size(), kInputBufferInMBs * kMiB);
+   if (!v4l2_format) {
+@@ -408,10 +413,12 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
+ 
+   const bool is_h264 =
+       VideoCodecProfileToVideoCodec(config.profile()) == VideoCodec::kH264;
++  const bool is_hevc =
++      VideoCodecProfileToVideoCodec(config.profile()) == VideoCodec::kHEVC;
+   constexpr size_t kNumInputBuffersH264 = 16;
+   constexpr size_t kNumInputBuffersVPx = 2;
+   const auto num_input_buffers =
+-      is_h264 ? kNumInputBuffersH264 : kNumInputBuffersVPx;
++      (is_h264 || is_hevc) ? kNumInputBuffersH264 : kNumInputBuffersVPx;
+   if (OUTPUT_queue_->AllocateBuffers(num_input_buffers, V4L2_MEMORY_MMAP,
+                                      /*incoherent=*/false) <
+       num_input_buffers) {
+@@ -516,12 +523,10 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+       decoder_buffer_and_callbacks_.push(std::move(a));
+     }
+ 
+-  } else if (VideoCodecProfileToVideoCodec(config_.profile()) ==
+-             VideoCodec::kHEVC) {
+-    NOTIMPLEMENTED();
+-    std::move(decode_cb).Run(DecoderStatus::Codes::kUnsupportedCodec);
+-    return;
+   } else {
++    // VP8, VP9 and HEVC. Media playback hands HEVC over one whole frame (an
++    // Annex B access unit) per DecoderBuffer, which is what stateful drivers
++    // need, so it doesn't go through a reassembler like H.264.
+     decoder_buffer_and_callbacks_.emplace(std::move(buffer),
+                                           std::move(decode_cb));
+   }

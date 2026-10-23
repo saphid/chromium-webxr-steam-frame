@@ -131,6 +131,24 @@ Chromium looks for V4L2 decoders at `/dev/video0` to `/dev/video255`.
 Hardware decoding is off by default in a build without VA-API, so the
 launcher adds `AcceleratedVideoDecoder` to `--enable-features`.
 
+The flags alone aren't enough. The Frame's decoder is stateful (it parses
+the bitstream itself), so Chromium uses `V4L2StatefulVideoDecoder`, the
+decoder written for Qualcomm Chromebooks. At 157.0.8088.0, and on `main`
+in October 2026, its `Decode()` returns `kUnsupportedCodec` for HEVC, even
+though the device's HEVC profiles are listed as supported.
+`patches/0002-v4l2-stateful-decoder-hevc.patch` handles HEVC the way the
+decoder handles VP9: each `DecoderBuffer` goes to the driver as it is.
+That works because `VideoDecoderPipeline` already converts HEVC to Annex B
+(`needs_bitstream_conversion_`), and media playback hands over one whole
+frame per buffer, which stateful drivers need. H.264 goes through a
+reassembler instead, because some sources split its frames. The patch also
+gives HEVC 16 input buffers, as H.264 has, and makes each buffer 16 MiB
+above 4K (upstream allows 4 MiB above 1080p). A frame larger than its buffer
+fails a `CHECK` and crashes the GPU process, and an 8K keyframe can be
+larger than 4 MiB.
+
+Not verified on the Frame yet (inferred from the source).
+
 ## Panels and the Steam library
 
 The Frame's compositor (gamescope) gives every Steam app ID its own SteamVR

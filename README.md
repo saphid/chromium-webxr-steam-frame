@@ -209,7 +209,10 @@ above.
   hardware decoder (`use_v4l2_codec`), and the launcher turns it on with
   `--enable-features=AcceleratedVideoDecoder`. It's the only HEVC (H.265)
   decoder Chromium has on Linux, and most VR180/360 video is HEVC. Without
-  it, HEVC video plays its sound but no picture (see
+  it, HEVC video plays its sound but no picture. Upstream's decoder for
+  this kind of device refuses HEVC, so
+  [`patches/0002-…`](patches/0002-v4l2-stateful-decoder-hevc.patch) adds it.
+  Not yet tested on the Frame (see
   [docs/technical-notes.md](docs/technical-notes.md#video-decoding)).
 - **Steam integration.** `frame/steam-shortcut.py` adds the shortcut through
   the Steam client's local DevTools port, the same API the Steam UI uses.
