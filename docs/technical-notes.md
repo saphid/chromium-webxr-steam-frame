@@ -123,6 +123,36 @@ after starting. The `chromium-xr` launcher removes the overlay from
 `LD_PRELOAD` before starting Chromium, keeping anything else that was
 preloaded.
 
+## Thumbstick scrolling
+
+Outside WebXR, the thumbsticks reach Chromium through Steam Input, not
+SteamVR. The Frame's controllers are Steam Input controller 0 ("Steam Frame
+Controllers", type `controller_steamframe_pair`). While the Chromium XR
+shortcut runs, Steam gives it its **Web Browser** layout,
+`controller_base/templates/controller_neptune_webbrowser.vdf`, with
+mouse-and-keyboard output (`mapping uses xinput : false`). Verified
+2026-10-23 from `~/.local/share/Steam/logs/controller.txt` for the
+2026-10-22 sessions (app 2349681812).
+
+In that layout the left stick is a d-pad whose up and down send the mouse
+wheel, repeating while held. The right stick moves the mouse pointer, which
+the laser already does. SteamVR's own panel bindings
+(`vrcompositor_bindings_frame_controller.json`) map both sticks to smooth
+scrolling, but Steam Input has the sticks while a Steam app runs (inferred).
+
+`frame/steam-input.py make OUT` builds a layout from Steam's own template
+with the right stick set up like the left, so either stick scrolls. The
+script doesn't apply it yet. The plan is to apply it through the Steam
+client's `SteamClient.Input` API (`GetConfigForAppAndController`,
+`SetSelectedConfigForApp`), which only works while the controllers are
+connected.
+
+Not verified yet:
+
+- that the left stick scrolls a page today;
+- how Steam stores a chosen layout for this controller type;
+- that the generated layout scrolls in the headset.
+
 ## Debugging
 
 - **Testing without wearing the headset.** In standby SteamVR keeps the
