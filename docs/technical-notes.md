@@ -150,7 +150,12 @@ reassembler instead, because some sources split its frames. The patch also:
   `CHECK`s the size, which crashes the GPU process.
 - leaves single-plane P010 out of the output formats. Chromium can't lay it
   out yet: the first decoded 10-bit frame would fail a `CHECK`. The Frame's
-  decoder also gives 10-bit HEVC as NV12 (8-bit). Verified 2026-10-23: the
+  decoder also gives 10-bit HEVC as NV12 (8-bit).
+- reports a decode error when the decoder can't set up its output (for
+  example, no usable output format) or a frame doesn't fit, and fails later
+  decodes until the player resets. The decoder reports errors only through
+  its decode callbacks, so upstream left playback waiting silently in these
+  cases. Verified 2026-10-23: the
   Frame's `ffmpeg -c:v hevc_v4l2m2m` decoded 8-bit 1080p and Main 10 4K HEVC
   test clips on `/dev/video-dec0` with no errors, outputting NV12.
 
