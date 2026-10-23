@@ -159,8 +159,33 @@ reassembler instead, because some sources split its frames. The patch also:
   Frame's `ffmpeg -c:v hevc_v4l2m2m` decoded 8-bit 1080p and Main 10 4K HEVC
   test clips on `/dev/video-dec0` with no errors, outputting NV12.
 
-The patched Chromium hasn't been run on the Frame yet; the patch is
-inferred from the source.
+- stops offering HEVC Main 10 and VP9 profile 2 from V4L2 decoders that
+  take whole frames (stateful ones, like the Frame's). See below.
+
+**Chromium's V4L2 path on this Frame, verified 2026-10-23.** Steam's own
+Chromium, `cefsimple` from `~/.local/share/Steam/steamrtarm64` (CEF on
+Chromium 126), ran the codec probe with
+`--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode`. Results:
+
+| Clip | Result |
+|---|---|
+| HEVC 1920 × 1080 | 152 frames decoded |
+| HEVC 7680 × 3840 | 113 frames in 3.8 s |
+| H.264, VP9 | decoded |
+| HEVC Main 10 3840 × 2160 | failed to decode (`Failed to pick an output format`) |
+
+For 8-bit streams the driver offers Q08C, NV12 and NV21 as output. For
+10-bit HEVC it offers only Q10C, Qualcomm's compressed 10-bit format, which
+Chromium can't use. Asking it for NV12 anyway (`ffmpeg -c:v hevc_v4l2m2m`)
+gives frames with the right shapes but wrong colours. So 10-bit HEVC can't
+play on this decoder in Chromium.
+
+Chromium 126 still said `canPlayType()` "probably" for HEVC Main 10. A
+player that trusts that would pick 10-bit HEVC over an H.264 copy and show
+nothing. So the patch stops offering HEVC Main 10, and players fall back.
+VP9 profile 2 goes to Chromium's software VP9 decoder.
+
+Our patched Chromium 157 hasn't been run on the Frame yet.
 
 ## Panels and the Steam library
 
