@@ -44,7 +44,9 @@ SteamVR 2.17.10) with Chromium **156.0.8071.0**, built for arm64:
 | Frame rate | 72 fps, every frame 13.9–14 ms over 16 s (simple scene); SteamVR dropped frames only at startup |
 
 The build now targets Chromium 157 or newer, which has the
-upstream Linux OpenXR changes merged. It hasn't been tested on the Frame yet.
+upstream Linux OpenXR changes merged. Its first Frame test exposed an
+input-buffer configuration problem; a correction is being rebuilt. See
+[video verification](docs/technical-notes.md#video-decoding).
 
 This is an unofficial, experimental build. See [Limitations](#limitations)
 before you use it for anything other than VR sites.
@@ -213,7 +215,8 @@ above.
   this kind of device refuses HEVC, so
   [`patches/0002-…`](patches/0002-v4l2-stateful-decoder-hevc.patch) adds it.
   10-bit HEVC (Main 10) can't play this way; the build reports it as
-  unsupported so players pick another format. Not yet tested on the Frame
+  unsupported so players pick another format. The first 157 build still
+  failed to allocate input buffers; patch 0003 corrects their dimensions
   (see
   [docs/technical-notes.md](docs/technical-notes.md#video-decoding)).
 - **Steam integration.** `frame/steam-shortcut.py` adds the shortcut through

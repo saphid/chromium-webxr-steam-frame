@@ -15,6 +15,10 @@ builds (`CHROMIUM_VERSION`), in file-name order.
   Main 10 and VP9 profile 2 from such decoders: the Frame's gives 10-bit
   output only in a compressed Qualcomm format Chromium can't use. See [docs/technical-notes.md](../docs/technical-notes.md#video-decoding).
 
+- `0003-v4l2-stateful-coded-size.patch`: supplies the known coded dimensions
+  when configuring the compressed-input queue. Iris accepts a zero-sized
+  format but then rejects buffer allocation with `EINVAL`.
+
 These patches modify Chromium source and are under
 [Chromium's BSD-style license](https://chromium.googlesource.com/chromium/src/+/main/LICENSE),
 Copyright The Chromium Authors.
