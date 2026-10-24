@@ -263,8 +263,9 @@ reached. No independent review of that correction is claimed.
 
 ### Immersive HEVC VR180 test, 2026-10-24
 
-**Partial pass: hardware decoding, both XR eye buffers and SteamVR submission
-passed; final visible headset playback remains unverified.** The installed
+**First run: partial pass.** Hardware decoding, both XR eye buffers and
+SteamVR submission passed, but final visible headset playback was unverified.
+The follow-up below subsequently verified actual headset pictures and motion. The installed
 binary was unchanged. A real `immersive-vr` session started through a valid
 button gesture, with a temporary profile and the production X11/features/
 seccomp settings. No headless mode, shim, fake XR, `--no-sandbox` or
@@ -312,6 +313,47 @@ Raw evidence is in the steam-frame checkout under
 fixture/image hashes and captures. This was runtime verification, not an
 independent code review. Owned processes/profile/staging and lock were
 cleaned up; the installed binary and launcher hashes were unchanged.
+
+
+### Final headset picture verified, 2026-10-24
+
+The follow-up verified actual **SteamVR stereo compositor output** using
+`IVRScreenshots_001`, distinct from the browser eye-buffer readbacks above.
+Two captures at 11:11:24.867 and 11:11:28.998 UTC show the curved grid and
+coloured spheres in both eyes, with the yellow sphere in different positions.
+Native tracking was valid (result 200) and the dashboard was hidden at both
+successful captures. SteamVR submissions increased from 646 to 937.
+
+The same installed binary selected `V4L2VideoDecoder` for the same generated
+7680 × 3840 HEVC Main SBS 180° fixture. The final short repeat drew 933 XR
+frames per eye; browser counters recorded 370 video frames, 9 dropped and
+no playback errors. This confirms picture and sampled motion, not a
+controlled frame-rate benchmark. The preceding short session also passed
+playback (503 browser video frames, 5 dropped).
+
+Tracking remained intermittent. The player initially centered from an
+invalid identity/emulated pose, leaving the scene at the edge of the view
+when tracking recovered. The test player was recentered once on a real,
+non-emulated pose using its existing rotation algorithm. No runtime pose,
+production browser, launcher or persistent profile was modified. Initial
+blank/off-center captures are retained in the raw evidence.
+
+![Two actual SteamVR headset stereo captures showing changed VR180 video content](verification/vr180-headset-motion-2026-10-24.gif)
+
+This GIF alternates **two still captures at 1 fps**; it is not a real-time
+recording or proof of playback smoothness. It supersedes the earlier
+final-headset visibility gap for this generated fixture. Third-party site
+compatibility, native-detail/high-bitrate 8K performance, sustained tracking
+and subjective comfort remain untested.
+
+[Verified headset result](verification/vr180-headset-verified-2026-10-24.json).
+Raw evidence: steam-frame `artifacts/chromium-xr-vr180-worn-2026-10-24/`.
+The `codex` / `gpt-6-astra` test worker completed; the parent inspected both
+final PNGs, checked capture/fixture hashes, raw decoder/tracking/submission
+records and cleanup. Dashboard visibility was restored, owned processes and
+temporary staging/profile were removed, and the shared-device lock released.
+Installed binary and launcher checksums remained unchanged; existing awake
+protection and SteamVR processes were preserved.
 
 ## Panels and the Steam library
 

@@ -50,8 +50,9 @@ errors. H.264 and VP9 also played. HEVC Main 10 is reported as unsupported
 so players can choose another format. WebXR returned
 `isSessionSupported("immersive-vr") === true`. A generated 8K HEVC VR180
 fixture also ran in immersive WebXR, with moving stereo eye images and
-SteamVR submissions. Final headset visibility remains unverified: captures
-were blank while tracking was invalid. Third-party VR180 sites still need testing.
+SteamVR submissions. A follow-up verified actual stereo headset pictures
+and changing video content in SteamVR captures with valid tracking.
+Tracking was intermittent; third-party VR180 sites still need testing.
 See [video verification](docs/technical-notes.md#video-decoding).
 
 This is an unofficial, experimental build. See [Limitations](#limitations)
