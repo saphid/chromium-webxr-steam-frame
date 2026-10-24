@@ -48,8 +48,10 @@ Chromium **157.0.8088.0** was installed and tested on the Frame on
 and 7680 × 3840 decoded 152 and 131 frames respectively, with no decode
 errors. H.264 and VP9 also played. HEVC Main 10 is reported as unsupported
 so players can choose another format. WebXR returned
-`isSessionSupported("immersive-vr") === true`; a real immersive session and
-VR180 site on 157 still need testing.
+`isSessionSupported("immersive-vr") === true`. A generated 8K HEVC VR180
+fixture also ran in immersive WebXR, with moving stereo eye images and
+SteamVR submissions. Final headset visibility remains unverified: captures
+were blank while tracking was invalid. Third-party VR180 sites still need testing.
 See [video verification](docs/technical-notes.md#video-decoding).
 
 This is an unofficial, experimental build. See [Limitations](#limitations)

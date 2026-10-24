@@ -235,7 +235,7 @@ frames and 8K decoded 139, with no errors and thousands of distinct sampled
 colours. The 8K capture was visually checked against a software-decoded
 ffmpeg frame from the same clip. The corrected build also returned
 `{"xr":true,"immersiveVR":true}` in a separate normal-browser WebXR probe.
-Actual immersive rendering and third-party VR180 playback remain untested on 157.
+Immersive VR180 results and the remaining headset-visibility limit are recorded below.
 
 [Machine-readable results](verification/hevc-frame-2026-10-24.json) and the
 8K decoded-frame capture:
@@ -259,6 +259,59 @@ A fresh independent review of patch 0003 and its recovery workflow was
 attempted through T3 (`claudeAgent`, `claude-opus-5-5`, high effort), but the
 review task failed before reviewing because the Claude API rate limit was
 reached. No independent review of that correction is claimed.
+
+
+### Immersive HEVC VR180 test, 2026-10-24
+
+**Partial pass: hardware decoding, both XR eye buffers and SteamVR submission
+passed; final visible headset playback remains unverified.** The installed
+binary was unchanged. A real `immersive-vr` session started through a valid
+button gesture, with a temporary profile and the production X11/features/
+seccomp settings. No headless mode, shim, fake XR, `--no-sandbox` or
+`--in-process-gpu` was used.
+
+The fixture was a locally generated, looping 7680 × 3840 HEVC Main 8-bit
+clip at 30 fps: left/right side-by-side, each eye a 180° equirectangular
+hemisphere. It has a synthetic 64 mm stereo baseline, eye labels, grid and
+moving spheres. Each eye was ray-traced at 640 × 640 then upscaled, so this
+proves the 8K decode dimensions and projection path, not native-detail or
+high-bitrate 8K performance. No audio or spatial MP4 metadata; a minimal
+WebXR player supplied the stereo projection. The public three.js video
+example was inspected but is stereo 360°, so no third-party VR180 site
+compatibility is claimed.
+
+- Media events selected `V4L2VideoDecoder` for HEVC 7680 × 3840. Browser
+  playback counters recorded 5,545 video frames, 35 dropped and no reported
+  decode errors; 5,521 video-frame callbacks fired. These are browser
+  playback counters, not an instrumented hardware decode count.
+- WebXR rendered 14,848 frames over 207.4 seconds (71.57 mean frames/s), with
+  two 1728 × 1728 viewports in a 3456 × 1728 framebuffer. Both eyes were
+  drawn on every reported XR frame. Six direct eye-buffer samples showed
+  moving video pixels, correct eye labels and distinct stereo views.
+- SteamVR independently recorded 14,895 submissions from Chromium's XR
+  process. This run included looping and costly readback captures; it is
+  not a controlled performance benchmark.
+- Actual SteamVR headset screenshots remained uniform dark background.
+  Tracking was invalid (`poseValid=false`, result 101 / out of range);
+  WebXR returned identity orientation and emulated position. The mirror API
+  returned `InvalidTexture`. Invalid tracking co-occurred with the blank
+  captures; its role in the failure was not conclusively isolated. Final
+  headset visibility, head-motion behavior and subjective viewing remain
+  unverified. Repeat that check with the headset tracking in its playspace.
+
+The image below samples the actual XR eye buffers, **not the final headset
+compositor output**. It shows six sampled frames, not a real-time recording.
+
+![Sampled motion from both Frame XR eye buffers; final headset visibility unverified](verification/vr180-xr-eye-buffers-2026-10-24.gif)
+
+[Machine-readable VR180 result](verification/vr180-frame-2026-10-24.json) ·
+[Blank final headset capture](verification/vr180-headset-capture-2026-10-24.png).
+Raw evidence is in the steam-frame checkout under
+`artifacts/chromium-xr-vr180-2026-10-24/`. The test was performed by T3's
+`codex` / `gpt-6-astra` worker (completed); the parent checked raw metrics,
+fixture/image hashes and captures. This was runtime verification, not an
+independent code review. Owned processes/profile/staging and lock were
+cleaned up; the installed binary and launcher hashes were unchanged.
 
 ## Panels and the Steam library
 
