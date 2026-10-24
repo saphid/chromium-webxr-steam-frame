@@ -1,0 +1,202 @@
+diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+--- a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
++++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+@@ -392,12 +392,17 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
+   const auto profile_as_v4l2_fourcc =
+       VideoCodecProfileToV4L2PixFmt(config.profile(), /*slice_based=*/false);
+ 
+-  // Allocate larger |OUTPUT_queue_| buffers for resolutions above 1080p.
++  // Allocate larger |OUTPUT_queue_| buffers for resolutions above 1080p, and
++  // larger still above 4K: an 8K keyframe can exceed 4 MiB, and a frame that
++  // doesn't fit in a buffer fails to decode (TryAndEnqueueOUTPUTQueueBuffers()).
+   // TODO(hnt): Investigate ways to reduce this size.
+   constexpr size_t kMiB = 1024 * 1024;
+   constexpr int kFullHDNumPixels = 1920 * 1080;
+-  const size_t kInputBufferInMBs =
+-      (config.coded_size().GetArea() <= kFullHDNumPixels) ? 2 : 4;
++  constexpr int k4KNumPixels = 3840 * 2160;
++  const int num_pixels = config.coded_size().GetArea();
++  const size_t kInputBufferInMBs = num_pixels <= kFullHDNumPixels ? 2
++                                   : num_pixels <= k4KNumPixels   ? 4
++                                                                  : 16;
+   const auto v4l2_format = OUTPUT_queue_->SetFormat(
+       profile_as_v4l2_fourcc, gfx::Size(), kInputBufferInMBs * kMiB);
+   if (!v4l2_format) {
+@@ -408,10 +413,12 @@ void V4L2StatefulVideoDecoder::Initialize(const VideoDecoderConfig& config,
+ 
+   const bool is_h264 =
+       VideoCodecProfileToVideoCodec(config.profile()) == VideoCodec::kH264;
++  const bool is_hevc =
++      VideoCodecProfileToVideoCodec(config.profile()) == VideoCodec::kHEVC;
+   constexpr size_t kNumInputBuffersH264 = 16;
+   constexpr size_t kNumInputBuffersVPx = 2;
+   const auto num_input_buffers =
+-      is_h264 ? kNumInputBuffersH264 : kNumInputBuffersVPx;
++      (is_h264 || is_hevc) ? kNumInputBuffersH264 : kNumInputBuffersVPx;
+   if (OUTPUT_queue_->AllocateBuffers(num_input_buffers, V4L2_MEMORY_MMAP,
+                                      /*incoherent=*/false) <
+       num_input_buffers) {
+@@ -448,6 +455,10 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+                                       DecodeCB decode_cb) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+   VLOGF(3) << buffer->AsHumanReadableString(/*verbose=*/false);
++  if (failed_) {
++    std::move(decode_cb).Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++    return;
++  }
+   if (!IsInitialized()) {
+     DecoderStatus init_result;
+     Initialize(
+@@ -476,7 +487,12 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+       decoder_buffer_and_callbacks_.emplace(
+           h264_frame_reassembler_->AssembleAndFlushFragments(),
+           base::DoNothing());
+-      TryAndEnqueueOUTPUTQueueBuffers();
++      if (!TryAndEnqueueOUTPUTQueueBuffers() && failed_) {
++        // The last frame didn't fit; FailPendingDecodes() can't reach this
++        // end-of-stream |decode_cb|, so fail it here.
++        std::move(decode_cb).Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++        return;
++      }
+     }
+ 
+     const bool is_pending_work = !decoder_buffer_and_callbacks_.empty();
+@@ -516,12 +532,10 @@ void V4L2StatefulVideoDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
+       decoder_buffer_and_callbacks_.push(std::move(a));
+     }
+ 
+-  } else if (VideoCodecProfileToVideoCodec(config_.profile()) ==
+-             VideoCodec::kHEVC) {
+-    NOTIMPLEMENTED();
+-    std::move(decode_cb).Run(DecoderStatus::Codes::kUnsupportedCodec);
+-    return;
+   } else {
++    // VP8, VP9 and HEVC. Media playback hands HEVC over one whole frame (an
++    // Annex B access unit) per DecoderBuffer, which is what stateful drivers
++    // need, so it doesn't go through a reassembler like H.264.
+     decoder_buffer_and_callbacks_.emplace(std::move(buffer),
+                                           std::move(decode_cb));
+   }
+@@ -592,6 +606,7 @@ void V4L2StatefulVideoDecoder::Reset(base::OnceClosure closure) {
+   if (flush_cb_) {
+     std::move(flush_cb_).Run(DecoderStatus::Codes::kAborted);
+   }
++  failed_ = false;
+ }
+ 
+ bool V4L2StatefulVideoDecoder::NeedsBitstreamConversion() const {
+@@ -625,8 +640,10 @@ void V4L2StatefulVideoDecoder::ApplyResolutionChange() {
+   // It's possible that we have been Reset()ed in the interval between receiving
+   // the resolution change event in WaitOnceForEvents() (in a background thread)
+   // and arriving here from our |client_|. Check if that's the case.
+-  if (IsInitialized())
+-    InitializeCAPTUREQueue();
++  if (IsInitialized() && !InitializeCAPTUREQueue()) {
++    // E.g. no output format we can use: fail instead of stalling.
++    FailPendingDecodes();
++  }
+ }
+ 
+ size_t V4L2StatefulVideoDecoder::GetMaxOutputFramePoolSize() const {
+@@ -833,6 +850,12 @@ V4L2StatefulVideoDecoder::EnumeratePixelLayoutCandidates(
+     if (!candidate_fourcc) {
+       continue;  // This is fine: means we don't recognize |candidate_fourcc|.
+     }
++    // V4L2Buffer can't lay out single-plane P010 yet (CreateFrame() returns
++    // null and the decoder CHECKs), so leave it out. With no usable format,
++    // decoding fails (see ApplyResolutionChange()) instead of crashing.
++    if (*candidate_fourcc == Fourcc(Fourcc::P010)) {
++      continue;
++    }
+ 
+     // TODO(mcasas): Consider what to do when the input bitstream is of higher
+     // bit depth: Some drivers (QC?) will support and enumerate both a high bit
+@@ -1166,8 +1189,19 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
+       CHECK_EQ(v4l2_buffer->PlanesCount(), 1u);
+       uint8_t* dst = static_cast<uint8_t*>(v4l2_buffer->GetPlaneMapping(0));
+       auto media_buffer_span = base::span(*media_buffer);
+-      CHECK_GE(v4l2_buffer->GetPlaneSize(/*plane=*/0),
+-               media_buffer_span.size());
++      // The driver may give us smaller buffers than we asked for, and nothing
++      // upstream bounds the size of a frame, so fail the decode instead of
++      // crashing the GPU process.
++      if (v4l2_buffer->GetPlaneSize(/*plane=*/0) < media_buffer_span.size()) {
++        LOG(ERROR) << "Input |media_buffer| of " << media_buffer_span.size()
++                   << " bytes doesn't fit in an |OUTPUT_queue_| buffer of "
++                   << v4l2_buffer->GetPlaneSize(/*plane=*/0) << " bytes";
++        std::move(media_decode_cb)
++            .Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++        // With H.264, the real DecodeCB may be on a later entry.
++        FailPendingDecodes();
++        return false;
++      }
+       UNSAFE_TODO(
+           memcpy(dst, media_buffer_span.data(), media_buffer_span.size()));
+       v4l2_buffer->SetPlaneBytesUsed(0, media_buffer_span.size());
+@@ -1189,6 +1223,21 @@ bool V4L2StatefulVideoDecoder::TryAndEnqueueOUTPUTQueueBuffers() {
+   return true;
+ }
+ 
++void V4L2StatefulVideoDecoder::FailPendingDecodes() {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  failed_ = true;
++  while (!decoder_buffer_and_callbacks_.empty()) {
++    auto media_decode_cb =
++        std::move(decoder_buffer_and_callbacks_.front().second);
++    decoder_buffer_and_callbacks_.pop();
++    std::move(media_decode_cb)
++        .Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++  }
++  if (flush_cb_) {
++    std::move(flush_cb_).Run(DecoderStatus::Codes::kPlatformDecodeFailure);
++  }
++}
++
+ void V4L2StatefulVideoDecoder::PrintAndTraceQueueStates(
+     const base::Location& from_here) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.h b/media/gpu/v4l2/v4l2_stateful_video_decoder.h
+--- a/media/gpu/v4l2/v4l2_stateful_video_decoder.h
++++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.h
+@@ -125,6 +125,12 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
+   // any enqueueing operation's ioctl fails, true otherwise.
+   bool TryAndEnqueueOUTPUTQueueBuffers();
+ 
++  // Runs every pending DecodeCB, and |flush_cb_|, with kPlatformDecodeFailure,
++  // and makes later Decode()s fail until Reset(). This class reports errors
++  // only through those callbacks, so a failure that doesn't reach one would
++  // otherwise leave playback waiting forever.
++  void FailPendingDecodes();
++
+   // Prints a VLOG with the state of |OUTPUT_queue| and |CAPTURE_queue_| for
+   // debugging, preceded with |from_here|s function name. Also TRACEs the
+   // queues' state.
+@@ -162,6 +168,8 @@ class MEDIA_GPU_EXPORT V4L2StatefulVideoDecoder : public VideoDecoderMixin {
+   DecodeCB flush_cb_ GUARDED_BY_CONTEXT(sequence_checker_);
+   // Set to true when the driver identifies itself as a Mediatek 8173.
+   bool is_mtk8173_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
++  // Set by FailPendingDecodes(), cleared by Reset().
++  bool failed_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
+ 
+   // Used only on V4L2_MEMORY_MMAP queues (e.g. Hana MT8173) to grab the visible
+   // rectangle upon |CAPTURE_queue_| configuration in InitializeCAPTUREQueue().
+diff --git a/media/gpu/v4l2/v4l2_utils.cc b/media/gpu/v4l2/v4l2_utils.cc
+--- a/media/gpu/v4l2/v4l2_utils.cc
++++ b/media/gpu/v4l2/v4l2_utils.cc
+@@ -619,6 +619,16 @@ std::optional<SupportedVideoDecoderConfigs> GetSupportedV4L2DecoderConfigs() {
+           &min_coded_size, &max_coded_size);
+ 
+       for (const auto& profile : media_codec_profiles) {
++        // Stateful decoders such as Qualcomm's iris give 10-bit output only
++        // in their own compressed format (Q10C), which Chromium can't use.
++        // Don't offer those profiles, so players pick another format and
++        // VP9 profile 2 goes to the software decoder.
++        if ((v4l2_codec == V4L2_PIX_FMT_HEVC &&
++             profile == HEVCPROFILE_MAIN10) ||
++            (v4l2_codec == V4L2_PIX_FMT_VP9 &&
++             profile == VP9PROFILE_PROFILE2)) {
++          continue;
++        }
+         supported_media_configs.emplace_back(SupportedVideoDecoderConfig(
+             profile, profile, min_coded_size, max_coded_size,
+ #if BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)

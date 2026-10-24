@@ -43,8 +43,17 @@ SteamVR 2.17.10) with Chromium **156.0.8071.0**, built for arm64:
 | Controllers inside WebXR pages | tracked pose every frame; squeeze events and button state reach the page (trigger, thumbstick and left controller not tested) |
 | Frame rate | 72 fps, every frame 13.9–14 ms over 16 s (simple scene); SteamVR dropped frames only at startup |
 
-The build now targets Chromium 157 or newer, which has the
-upstream Linux OpenXR changes merged. It hasn't been tested on the Frame yet.
+Chromium **157.0.8088.0** was installed and tested on the Frame on
+2026-10-24 (SteamOS 0.5.6, build 20261015.6141207): HEVC 1920 × 1080
+and 7680 × 3840 decoded 152 and 131 frames respectively, with no decode
+errors. H.264 and VP9 also played. HEVC Main 10 is reported as unsupported
+so players can choose another format. WebXR returned
+`isSessionSupported("immersive-vr") === true`. A generated 8K HEVC VR180
+fixture also ran in immersive WebXR, with moving stereo eye images and
+SteamVR submissions. A follow-up verified actual stereo headset pictures
+and changing video content in SteamVR captures with valid tracking.
+Tracking was intermittent; third-party VR180 sites still need testing.
+See [video verification](docs/technical-notes.md#video-decoding).
 
 This is an unofficial, experimental build. See [Limitations](#limitations)
 before you use it for anything other than VR sites.
@@ -205,6 +214,18 @@ above.
   allows only that one option. It's reported upstream, with the seccomp
   issue below, in
   [utzcoz/chromium-webxr-linux#7](https://github.com/utzcoz/chromium-webxr-linux/issues/7).
+- **Hardware video decoding.** The build decodes video on the Frame's V4L2
+  hardware decoder (`use_v4l2_codec`), and the launcher turns it on with
+  `--enable-features=AcceleratedVideoDecoder`. It's the only HEVC (H.265)
+  decoder Chromium has on Linux, and most VR180/360 video is HEVC. Without
+  it, HEVC video plays its sound but no picture. Upstream's decoder for
+  this kind of device refuses HEVC, so
+  [`patches/0002-…`](patches/0002-v4l2-stateful-decoder-hevc.patch) adds it.
+  10-bit HEVC (Main 10) can't play this way; the build reports it as
+  unsupported so players pick another format. Patch 0003 supplies the coded
+  dimensions Iris needs before it can allocate input buffers
+  (see
+  [docs/technical-notes.md](docs/technical-notes.md#video-decoding)).
 - **Steam integration.** `frame/steam-shortcut.py` adds the shortcut through
   the Steam client's local DevTools port, the same API the Steam UI uses.
   Steam runs each app as its own panel, so Chromium gets one too.

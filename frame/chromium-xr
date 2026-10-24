@@ -29,6 +29,9 @@ if [[ -n "${LD_PRELOAD:-}" ]]; then
 fi
 
 # --enable-features=OpenXR: the Linux OpenXR device is off by default.
+#   AcceleratedVideoDecoder: hardware video decoding (the Frame's V4L2
+#   decoder) is off by default in builds without VA-API. Without it, HEVC
+#   video plays its sound but shows no picture.
 # --ozone-platform=x11: gamescope's X display, where each app is a panel.
 # --no-first-run and --password-store=basic: otherwise startup can stop at a
 #   first-run or keyring prompt you can't see.
@@ -37,7 +40,7 @@ fi
 #   docs/technical-notes.md). The namespace sandbox stays on.
 exec "$CHROME" \
   --user-data-dir="$HOME/.config/chromium-xr" \
-  --enable-features=OpenXR \
+  --enable-features=OpenXR,AcceleratedVideoDecoder \
   --ozone-platform=x11 \
   --no-first-run --no-default-browser-check --password-store=basic \
   --disable-seccomp-filter-sandbox \

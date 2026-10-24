@@ -6,7 +6,8 @@
 # as an artifact. The idea comes from ungoogled-chromium-portablelinux.
 #
 #   ci.sh setup               free disk space, pick CHROMIUM_XR_DIR
-#   ci.sh restore             unpack the previous job's tree
+#   ci.sh fetch               download the previous job's tree
+#   ci.sh restore             unpack it
 #   ci.sh build FIRST LAST    build until done or out of time; sets the
 #                             step output status=running|completed
 #   ci.sh save                pack the tree for the next job
@@ -32,6 +33,38 @@ case $1 in
     sudo chown "$(id -u):$(id -g)" "$dir"
     echo "CHROMIUM_XR_DIR=$dir" >> "$GITHUB_ENV"
     df -h / "$dir"
+    ;;
+
+  fetch)
+    # actions/download-artifact fetches the 9 GB tree in one go and starts
+    # again from zero after an error. The artifact store sometimes answers
+    # 503 to about one request in four for hours, so that never finished
+    # (run 39879394713). Resume after each error instead, then check the
+    # digest. Needs GH_TOKEN with actions: read.
+    mkdir -p "$CACHE_DIR"
+    read -r id size digest < <(gh api \
+      "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=build-tree.tar.zst" \
+      -q '.artifacts | max_by(.created_at) | "\(.id) \(.size_in_bytes) \(.digest)"')
+    [ -n "$id" ] || { echo "::error::no build-tree.tar.zst artifact in this run"; exit 1; }
+    echo "artifact $id, $size bytes"
+    for attempt in $(seq 1 300); do
+      have=$(stat -c %s "$CACHE" 2>/dev/null || echo 0)
+      [ "$have" -lt "$size" ] || break
+      # The signed storage URL expires, so ask for a fresh one each time.
+      url=$(curl -sS -o /dev/null -w '%{redirect_url}' -H "Authorization: Bearer $GH_TOKEN" \
+        "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip") || url=
+      if [ -n "$url" ]; then
+        # No --retry: curl's retries restart from where this attempt began,
+        # not from where it stopped. The loop resumes instead, and the speed
+        # limit turns a stalled connection into an error that it resumes.
+        curl -fsS --speed-limit 1000000 --speed-time 60 -C - -o "$CACHE" "$url" ||
+          echo "attempt $attempt stopped at $(stat -c %s "$CACHE" 2>/dev/null || echo 0) of $size bytes"
+      fi
+      sleep 2
+    done
+    [ "$(stat -c %s "$CACHE" 2>/dev/null || echo 0)" = "$size" ] ||
+      { echo "::error::build tree download incomplete"; exit 1; }
+    echo "${digest#sha256:}  $CACHE" | sha256sum -c -
     ;;
 
   restore)

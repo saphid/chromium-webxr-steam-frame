@@ -1,0 +1,15 @@
+diff --git a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+--- a/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
++++ b/media/gpu/v4l2/v4l2_stateful_video_decoder.cc
+@@ -403,8 +403,10 @@
+   const size_t kInputBufferInMBs = num_pixels <= kFullHDNumPixels ? 2
+                                    : num_pixels <= k4KNumPixels   ? 4
+                                                                   : 16;
++  // Iris accepts a zero-sized format but rejects VIDIOC_REQBUFS afterwards.
++  // Supply the coded size known from the container before allocating buffers.
+   const auto v4l2_format = OUTPUT_queue_->SetFormat(
+-      profile_as_v4l2_fourcc, gfx::Size(), kInputBufferInMBs * kMiB);
++      profile_as_v4l2_fourcc, config.coded_size(), kInputBufferInMBs * kMiB);
+   if (!v4l2_format) {
+     std::move(init_cb).Run(DecoderStatus::Codes::kFailedToCreateDecoder);
+     return;
