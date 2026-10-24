@@ -204,7 +204,61 @@ That diagnostic used `--no-sandbox --in-process-gpu` so the shim could reach
 the ioctl call; it is evidence for the size mismatch, not verification of
 the rebuilt browser under its normal process setup. Neither flag nor the
 shim is in the installed launcher. The source patch applies cleanly on top
-of patch 0002. Rebuilt-browser and WebXR verification remain pending.
+of patch 0002. Run B's headless GPU probe also returned
+`navigator.xr.isSessionSupported("immersive-vr") === true` under the normal
+process sandbox setup. An immersive session and a real VR180 site still
+need testing.
+
+**Corrected build installed and verified, 2026-10-24.**
+[Run 40060061894](https://github.com/saphid/chromium-webxr-steam-frame/actions/runs/40060061894)
+at [f586f00](https://github.com/saphid/chromium-webxr-steam-frame/commit/f586f00227d6fb1afe26c44e28991f17cb069ea1)
+succeeded. Artifact 12547641202 was 146,203,864 bytes, with SHA-256
+`771b849b76bd0ba133e826e1fad289b2d3e68cb7ac55589953e221cd5af4019e`,
+verified against GitHub's metadata before installation. The existing
+laser-touch/systemd launcher was retained byte-for-byte with
+`OpenXR,AcceleratedVideoDecoder`; Steam shortcut 2349681812 and the original
+156 binary/launcher rollback copies were preserved.
+
+A normal, separate-process browser on `DISPLAY=:0 --ozone-platform=x11`
+passed the clip probe with no shim, `--no-sandbox`, or `--in-process-gpu`:
+
+| Clip | Dimensions | Decoded frames | Decode error |
+|---|---|---|---|
+| HEVC Main | 1920 × 1080 | 152 | none |
+| HEVC Main | 7680 × 3840 | 131 | none |
+| H.264 | 1920 × 1080 | 151 | none |
+| H.264 | 5760 × 2880 | 145 | none |
+| VP9 | 1920 × 1080 | 152 | none |
+
+A second pass drew decoded HEVC frames into a canvas: 1080p decoded 150
+frames and 8K decoded 139, with no errors and thousands of distinct sampled
+colours. The 8K capture was visually checked against a software-decoded
+ffmpeg frame from the same clip. The corrected build also returned
+`{"xr":true,"immersiveVR":true}` in a separate normal-browser WebXR probe.
+Actual immersive rendering and third-party VR180 playback remain untested on 157.
+
+[Machine-readable results](verification/hevc-frame-2026-10-24.json) and the
+8K decoded-frame capture:
+
+![8K HEVC test pattern decoded and drawn by Chromium on the Frame](verification/hevc-8k-frame-2026-10-24.png)
+
+HEVC Main 10 returned empty `canPlayType()` and false MSE support, as intended.
+The probe explicitly pauses each video, clears its source and calls `load()`
+before the next clip: merely removing a playing element can retain its decoder
+and make the subsequent 8K allocation fail.
+
+Headless mode remains unsuitable for this hardware playback probe. Even with
+`DISPLAY=:0 --enable-gpu`, and with explicit GL or X11 selection, it failed
+at `MailboxVideoFrameConverter`: no shared-image backing factory, followed
+by a GPU restart. These failures are retained as evidence, not counted as
+successful playback. The installed launcher uses the tested normal X11 path.
+Raw results and logs are in the owning steam-frame checkout under
+`artifacts/chromium-xr-hevc-2026-10-24/`.
+
+A fresh independent review of patch 0003 and its recovery workflow was
+attempted through T3 (`claudeAgent`, `claude-opus-5-5`, high effort), but the
+review task failed before reviewing because the Claude API rate limit was
+reached. No independent review of that correction is claimed.
 
 ## Panels and the Steam library
 

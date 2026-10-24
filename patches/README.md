@@ -17,7 +17,9 @@ builds (`CHROMIUM_VERSION`), in file-name order.
 
 - `0003-v4l2-stateful-coded-size.patch`: supplies the known coded dimensions
   when configuring the compressed-input queue. Iris accepts a zero-sized
-  format but then rejects buffer allocation with `EINVAL`.
+  format but then rejects buffer allocation with `EINVAL`. Verified in the
+  installed Chromium 157.0.8088.0 build: HEVC 1080p and 7680 × 3840 decoded
+  normally on the Frame. See [device results](../docs/technical-notes.md#video-decoding).
 
 These patches modify Chromium source and are under
 [Chromium's BSD-style license](https://chromium.googlesource.com/chromium/src/+/main/LICENSE),
