@@ -24,6 +24,8 @@ concurrency:
 
 permissions:
   contents: read
+  # ci.sh fetch downloads the previous part's tree through the API.
+  actions: read
 
 env:
   CHROMIUM_VERSION: ${{ inputs.chromium_version }}
