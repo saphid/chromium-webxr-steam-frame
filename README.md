@@ -188,7 +188,10 @@ hand tracking at Ask can leave the VR request waiting for a panel prompt.
 Players can start VR without hands when that optional feature is blocked.
 Sites that require hands will fail until you explicitly allow hand tracking
 for that site in Chromium settings; site-specific hand-tracking exceptions
-are preserved. Existing VR Block exceptions are removed at startup.
+are preserved. The launcher resets the global hand-tracking default to Block
+on each idle launch; use a site-specific Allow for sites that need hands.
+A saved site-specific Ask can bring the prompt wait back. Existing VR Block
+exceptions are removed at startup.
 
 Preferences are updated only while this profile is idle. Close Chromium XR
 and relaunch after updating the launcher.

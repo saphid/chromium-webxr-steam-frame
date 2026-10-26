@@ -130,10 +130,16 @@ A second launch left live Preferences byte-identical. Systemd/laser code was
 preserved, but the direct launcher branch was used in this run.
 
 [Installed results](verification/xr-permissions-frame-2026-10-26.json) include
-the exact hashes and limits. Fresh Opus 5.5 high independent review failed
-before review due to Claude API rate limit. The unknown silent clip and
-reported browser crash remain unresolved; no FATAL/new core occurred in this
-bounded run. Physical speakers remained muted at zero.
+the exact hashes and limits. The initial Opus 5.5 high review attempt hit a
+Claude API rate limit. After automatic resumption, the independent read-only
+review completed against commit `df78b14` and the installed launcher delta.
+It verified preference semantics, preservation, mode 0600, idempotence and
+running-profile behavior. Two low-severity documentation findings are now
+addressed: global defaults reset on idle launch, and review status is current.
+The silent clip remains unidentified. The user clarified that Chromium stays
+open while its view disappears and becomes unresponsive after Next; this
+failure remains unresolved. No FATAL/new core occurred in the earlier bounded
+run. Physical speakers remained muted at zero.
 
 ## Graphics
 

@@ -1,7 +1,7 @@
 {
   "date": "2026-10-26",
   "status": "installed and bounded runtime checks passed",
-  "scope": "Optional hand-tracking permission hang and Next/audio follow-up; original silent clip and browser crash remain unresolved",
+  "scope": "Optional hand-tracking permission hang and Next/audio follow-up; silent clip and view disappearance/input failure while browser remains open unresolved",
   "installedLauncherSHA256": "45e6d39cea7cd44fbfcd1ae5bbeacc586eb3f5ebf1b5a7a380b1af21fefd7629",
   "binarySHA256Unchanged": "79348d779b3eeff7b33d80b10cf61f82f04848adb2fdba135789d89c907038e4",
   "profileDefaults": {
@@ -98,7 +98,11 @@
     "provider": "claudeAgent",
     "model": "claude-opus-5-5",
     "effort": "high",
-    "status": "failed",
-    "reason": "Claude API rate limit reached before review; no independent review performed."
+    "status": "completed after automatic rate-limit resumption",
+    "initialStatus": "failed",
+    "initialReason": "Claude API rate limit reached before review; no independent review performed.",
+    "target": "df78b14 permission source/docs and exact installed launcher delta",
+    "findings": "Two low-severity documentation findings: disclose global default reset and update review status. Both addressed in docs; no executable change.",
+    "checks": "Preference key/values, preservation, atomic0600 write, idempotence, live-profile skip, bash syntax"
   }
 }
