@@ -38,8 +38,55 @@ fi
 # --disable-seccomp-filter-sandbox: with the XR process's seccomp policy on,
 #   SteamVR sees the wrong process ID and refuses the session (see
 #   docs/technical-notes.md). The namespace sandbox stays on.
+profile=$HOME/.config/chromium-xr
+
+# Optional hand-tracking at Ask can leave VR requests pending in the panel.
+# Default to Block for hands; site-specific hand-tracking exceptions still win.
+# Let every site enter VR without the "Allow VR?" prompt: make Allow the
+# default for the VR permission, and drop per-site Block exceptions. There's
+# no policy or switch for this, and Chromium only reads Preferences at start,
+# so skip it while Chromium is running. flock stops two launches editing the
+# file at once; the running check is inside it, so it's fresh for each edit.
+mkdir -p "$profile"
+flock "$profile/.chromium-xr-prefs.lock" python3 - "$profile" <<'EOF' ||
+import json, os, sys, tempfile
+profile = sys.argv[1]
+try:
+    # SingletonLock is a symlink to "<host>-<pid>" while Chromium runs.
+    os.kill(int(os.readlink(os.path.join(profile, 'SingletonLock')).rsplit('-', 1)[1]), 0)
+    sys.exit(0)  # Chromium is running
+except (OSError, ValueError, IndexError):
+    pass  # no lock, or a stale one: not running
+path = os.path.join(profile, 'Default', 'Preferences')
+try:
+    with open(path) as f:
+        prefs = json.load(f)
+except FileNotFoundError:
+    prefs = {}
+settings = prefs.setdefault('profile', {})
+defaults = settings.setdefault('default_content_setting_values', {})
+defaults['vr'] = 1  # Allow
+defaults['hand_tracking'] = 2  # Block optional hands; avoid the hidden prompt
+vr = settings.get('content_settings', {}).get('exceptions', {}).get('vr', {})
+for pattern in [p for p, v in vr.items() if isinstance(v, dict) and v.get('setting') == 2]:
+    del vr[pattern]  # Block
+os.makedirs(os.path.dirname(path), exist_ok=True)
+# Private (0600) and unique, so the file never widens its permissions and two
+# launches can't write into each other's copy.
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix='.Preferences.')
+try:
+    with os.fdopen(fd, 'w') as f:
+        json.dump(prefs, f)
+    os.replace(tmp, path)
+except BaseException:
+    os.unlink(tmp)
+    raise
+EOF
+  echo "chromium-xr: couldn't configure VR permissions" >&2
+
+
 exec "$CHROME" \
-  --user-data-dir="$HOME/.config/chromium-xr" \
+  --user-data-dir="$profile" \
   --enable-features=OpenXR,AcceleratedVideoDecoder \
   --ozone-platform=x11 \
   --no-first-run --no-default-browser-check --password-store=basic \

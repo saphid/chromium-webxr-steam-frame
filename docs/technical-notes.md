@@ -98,6 +98,43 @@ Measured with a session that clears to red, with `hand-tracking` and
 - Requesting `hand-tracking` makes Chromium ask **Allow hand tracking?** in
   the browser panel before the session starts.
 
+## Optional hand-tracking permission stall (2026-10-26)
+
+With VR Allow and optional `hand-tracking` at Ask, five fresh-profile native
+XR requests stayed pending for eight seconds. Setting only the hands default
+to Block resolved 5/5 requests without hands; Allow resolved 4/4 with hands.
+Effective settings were read back through Chromium settings. These tests used
+trusted input and no CDP permission grants. Removing optional hands also
+resolved 2/2 requests with VR Allow unchanged.
+
+The launcher now sets `profile.default_content_setting_values.vr = 1` and
+`hand_tracking = 2` before startup. It preserves hand-tracking site exceptions,
+skips writes while the profile is running, and writes Preferences atomically
+with mode 0600 under a lock. Required-hand sites need a per-site Allow.
+
+A disposable profile with the proposed Block setting passed three actual
+player XR/Next/re-entry cycles. Next performed full page navigation and ended
+XR; the destination played in 2D before re-entry. This was callback-only
+coverage, without trusted controller input. Video frames, media time and
+stereo AAC decoded bytes advanced while physical speakers stayed muted at
+zero. This isolates a permission hang; it does not establish the cause of the
+reported browser crash or the unidentified silent clip.
+
+Installed verification used the real profile and installed launcher. The
+neutral origin resolved trusted optional-hand XR with 20 valid viewer poses;
+required hands rejected with `NotSupportedError`. The real site retained a
+pre-existing hand-tracking Allow exception and passed three XR/HUD Next
+cycles with that effective permission, without CDP overrides. Its three
+Next destinations used V4L2; decoded video frames and AAC bytes advanced.
+A second launch left live Preferences byte-identical. Systemd/laser code was
+preserved, but the direct launcher branch was used in this run.
+
+[Installed results](verification/xr-permissions-frame-2026-10-26.json) include
+the exact hashes and limits. Fresh Opus 5.5 high independent review failed
+before review due to Claude API rate limit. The unknown silent clip and
+reported browser crash remain unresolved; no FATAL/new core occurred in this
+bounded run. Physical speakers remained muted at zero.
+
 ## Graphics
 
 Chromium's GPU process uses ANGLE on OpenGL, which runs on zink over the

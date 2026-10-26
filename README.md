@@ -180,6 +180,19 @@ page directly.
 
 This removes the build, the launcher, the menu entry and the Steam shortcut.
 
+## VR permissions
+
+The launcher allows VR by default in its dedicated `~/.config/chromium-xr`
+profile and blocks hand tracking by default. On the Frame, leaving optional
+hand tracking at Ask can leave the VR request waiting for a panel prompt.
+Players can start VR without hands when that optional feature is blocked.
+Sites that require hands will fail until you explicitly allow hand tracking
+for that site in Chromium settings; site-specific hand-tracking exceptions
+are preserved. Existing VR Block exceptions are removed at startup.
+
+Preferences are updated only while this profile is idle. Close Chromium XR
+and relaunch after updating the launcher.
+
 ## Updating
 
 The build pins one Chromium release (`CHROMIUM_VERSION` in
