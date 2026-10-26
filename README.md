@@ -238,8 +238,8 @@ above.
   this kind of device refuses HEVC, so
   [`patches/0002-…`](patches/0002-v4l2-stateful-decoder-hevc.patch) adds it.
   10-bit HEVC (Main 10) can't play this way; the build reports it as
-  unsupported so players pick another format. Patch 0003 supplies the coded
-  dimensions Iris needs before it can allocate input buffers
+  unsupported so players pick another format. The same patch supplies the
+  coded dimensions Iris needs before it can allocate input buffers
   (see
   [docs/technical-notes.md](docs/technical-notes.md#video-decoding)).
 - **Steam integration.** `frame/steam-shortcut.py` adds the shortcut through

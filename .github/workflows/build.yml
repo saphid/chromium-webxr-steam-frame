@@ -16,10 +16,6 @@ on:
         description: Chromium release tag to build (empty for the one in build/build.sh)
         required: false
         default: ""
-      rebuild_coded_size:
-        description: Reuse run C's tree for the Frame coded-size correction
-        type: boolean
-        default: false
   push:
     tags: ["v*"]
 
@@ -39,41 +35,7 @@ env:
   CHROMIUM_XR_SISO: "false"
 
 jobs:
-  rebuild:
-    if: ${{ inputs.rebuild_coded_size }}
-    name: Rebuild HEVC coded size from run C
-    runs-on: ubuntu-24.04
-    timeout-minutes: 360
-    steps:
-      - uses: actions/checkout@v7
-      - name: Set up runner
-        run: .github/scripts/ci.sh setup
-      - name: Download run C build tree
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/39934948705" -q .head_sha)" = be09303f2b819a00198db19cc0a620d627026966
-          GITHUB_RUN_ID=39934948705 .github/scripts/ci.sh fetch
-      - name: Unpack build tree
-        run: .github/scripts/ci.sh restore
-      - name: Verify baseline and apply coded-size fix
-        run: |
-          cd "$CHROMIUM_XR_DIR/src"
-          echo '409787c9c470354e5e9b8b2c84011b59f1a93b52ff71239509e44220975e6b94  media/gpu/v4l2/v4l2_stateful_video_decoder.cc' | sha256sum -c -
-          git apply --check "$GITHUB_WORKSPACE/patches/0003-v4l2-stateful-coded-size.patch"
-          git apply "$GITHUB_WORKSPACE/patches/0003-v4l2-stateful-coded-size.patch"
-      - name: Build and package
-        env:
-          DEPOT_TOOLS_UPDATE: "0"
-        run: .github/scripts/ci.sh build false true
-      - uses: actions/upload-artifact@v7
-        with:
-          path: ${{ env.CHROMIUM_XR_DIR }}/chromium-xr-arm64.tar.xz
-          archive: false
-          if-no-files-found: error
-
   part_01:
-    if: ${{ !inputs.rebuild_coded_size }}
     name: Build part 1
     runs-on: ubuntu-24.04
     outputs:

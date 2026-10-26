@@ -240,13 +240,14 @@ stateful decoder calls `SetFormat()` with `gfx::Size()` (0 × 0). A native
 ioctl probe reproduced the failure for both H.264 and HEVC at every tested
 buffer count (2, 4, 8, 16); supplying 1920 × 1080 made all allocations pass.
 
-`0003-v4l2-stateful-coded-size.patch` passes `config.coded_size()` instead.
+The coded-size correction, initially patch 0003 and now folded into patch
+0002, passes `config.coded_size()` instead.
 A temporary diagnostic shim that supplied nonzero dimensions decoded HEVC
 1080p (150 frames) and 7680 × 3840 (91 frames); Main 10 remained unsupported.
 That diagnostic used `--no-sandbox --in-process-gpu` so the shim could reach
 the ioctl call; it is evidence for the size mismatch, not verification of
 the rebuilt browser under its normal process setup. Neither flag nor the
-shim is in the installed launcher. The source patch applies cleanly on top
+shim is in the installed launcher. The coded-size correction is part
 of patch 0002. Run B's headless GPU probe also returned
 `navigator.xr.isSessionSupported("immersive-vr") === true` under the normal
 process sandbox setup. An immersive session and a real VR180 site still
@@ -298,10 +299,15 @@ successful playback. The installed launcher uses the tested normal X11 path.
 Raw results and logs are in the owning steam-frame checkout under
 `artifacts/chromium-xr-hevc-2026-10-24/`.
 
-A fresh independent review of patch 0003 and its recovery workflow was
-attempted through T3 (`claudeAgent`, `claude-opus-5-5`, high effort), but the
-review task failed before reviewing because the Claude API rate limit was
-reached. No independent review of that correction is claimed.
+The initially rate-limited independent review of the coded-size correction
+and recovery workflow later resumed and completed as `claudeAgent` /
+`claude-opus-5-5`, high effort. It found no actionable C++ issue. It reproduced
+a local build resume failure: patch 0003 changed context used by patch 0002's
+reverse-check. The correction is now folded into patch 0002 so re-runs can
+recognize it as applied. The resulting Chromium source is byte-identical.
+The completed one-off run-C recovery job and dispatch input were removed;
+regular multipart builds no longer expose a recovery mode dependent on the
+expiring run-C artifact.
 
 
 ### Immersive HEVC VR180 test, 2026-10-24
