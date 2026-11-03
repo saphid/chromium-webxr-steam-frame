@@ -1,0 +1,173 @@
+{
+  "verified_at_utc": "2026-10-24T08:48:09.009957+00:00",
+  "run_url": "https://github.com/saphid/chromium-webxr-steam-frame/actions/runs/40060061894",
+  "source_commit": "f586f00227d6fb1afe26c44e28991f17cb069ea1",
+  "artifact_id": 12547641202,
+  "artifact_sha256": "771b849b76bd0ba133e826e1fad289b2d3e68cb7ac55589953e221cd5af4019e",
+  "installed_chrome_sha256": "79348d779b3eeff7b33d80b10cf61f82f04848adb2fdba135789d89c907038e4",
+  "launcher_sha256": "3926b43f148b443f8aac17e66d17eba5fe04c62dba433bef9f2580a741794c13",
+  "frame_build": "20261015.6141207",
+  "chromium": "157.0.8088.0",
+  "mode": "normal X11, separate GPU/renderer processes; DISPLAY=:0; --enable-features=OpenXR,AcceleratedVideoDecoder; --disable-seccomp-filter-sandbox; autoplay allowed for test",
+  "codec_results": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "h264_1080": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 1920,
+      "h": 1080,
+      "t": 4.881736,
+      "rs": 4,
+      "err": null,
+      "frames": 151,
+      "dropped": 0,
+      "decoded": 151
+    },
+    "hevc_1080": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 1920,
+      "h": 1080,
+      "t": 4.911071,
+      "rs": 4,
+      "err": null,
+      "frames": 152,
+      "dropped": 0,
+      "decoded": 152
+    },
+    "hevc10_4k": {
+      "canPlay": "",
+      "mse": false,
+      "mc": {
+        "powerEfficient": false,
+        "smooth": false,
+        "supported": false,
+        "keySystemAccess": null
+      },
+      "w": 0,
+      "h": 0,
+      "t": 4.930538,
+      "rs": 4,
+      "err": null,
+      "frames": 0,
+      "dropped": 0,
+      "decoded": 0
+    },
+    "h264_8k": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 5760,
+      "h": 2880,
+      "t": 4.679555,
+      "rs": 4,
+      "err": null,
+      "frames": 145,
+      "dropped": 0,
+      "decoded": 145
+    },
+    "hevc_8k": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 7680,
+      "h": 3840,
+      "t": 4.534267,
+      "rs": 4,
+      "err": null,
+      "frames": 131,
+      "dropped": 0,
+      "decoded": 131
+    },
+    "vp9_1080": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": false,
+        "smooth": false,
+        "supported": false,
+        "keySystemAccess": null
+      },
+      "w": 1920,
+      "h": 1080,
+      "t": 4.912392,
+      "rs": 4,
+      "err": null,
+      "frames": 152,
+      "dropped": 0,
+      "decoded": 152
+    }
+  },
+  "pixel_capture_results": {
+    "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36",
+    "hevc_1080": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 1920,
+      "h": 1080,
+      "t": 4.859442,
+      "rs": 4,
+      "err": null,
+      "frames": 150,
+      "dropped": 0,
+      "decoded": 150,
+      "colors": 3085
+    },
+    "hevc_8k": {
+      "canPlay": "probably",
+      "mse": true,
+      "mc": {
+        "powerEfficient": true,
+        "smooth": true,
+        "supported": true,
+        "keySystemAccess": null
+      },
+      "w": 7680,
+      "h": 3840,
+      "t": 4.602904,
+      "rs": 4,
+      "err": null,
+      "frames": 139,
+      "dropped": 0,
+      "decoded": 139,
+      "colors": 1495
+    }
+  },
+  "webxr": {
+    "xr": true,
+    "immersiveVR": true
+  },
+  "limits": [
+    "Headless playback fails in SharedImageBackingFactory; normal X11 playback passes.",
+    "Actual immersive rendering / third-party VR180 site not tested on this build.",
+    "Main 10 deliberately unsupported."
+  ]
+}
