@@ -25,10 +25,10 @@ runs:
 
     - name: Download build tree
       if: inputs.first != 'true'
-      uses: actions/download-artifact@v8
-      with:
-        name: build-tree.tar.zst
-        path: ${{ runner.temp }}/build-tree
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: .github/scripts/ci.sh fetch
 
     - name: Unpack build tree
       if: inputs.first != 'true'

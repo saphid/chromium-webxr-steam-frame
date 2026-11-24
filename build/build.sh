@@ -100,6 +100,11 @@ G
 
   mkdir -p out/XR
   # Rewritten on every run: change build settings here, not in out/XR/args.gn.
+  # use_v4l2_codec: decode video on the Frame's V4L2 hardware decoder. That's
+  # the only HEVC (H.265) decoder Chromium has on Linux, and most VR180/360
+  # video is HEVC. The Frame has no VA-API driver, so VA-API is off; with both
+  # on, Chromium would pick VA-API. Same pair as upstream's
+  # linux-v4l2-codec-rel builder.
   cat > out/XR/args.gn <<A
 target_os = "linux"
 target_cpu = "arm64"
@@ -112,6 +117,8 @@ blink_symbol_level = 0
 v8_symbol_level = 0
 proprietary_codecs = true
 ffmpeg_branding = "Chrome"
+use_v4l2_codec = true
+use_vaapi = false
 enable_nacl = false
 use_remoteexec = false
 use_siso = ${CHROMIUM_XR_SISO:-true}
@@ -120,6 +127,7 @@ A
   stage "gn gen"
   gn gen out/XR
   gn args out/XR --list=enable_openxr --short | tee -a "$W/stage"
+  gn args out/XR --list=use_v4l2_codec --short | tee -a "$W/stage"
 }
 
 build() {

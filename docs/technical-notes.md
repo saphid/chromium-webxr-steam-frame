@@ -98,11 +98,311 @@ Measured with a session that clears to red, with `hand-tracking` and
 - Requesting `hand-tracking` makes Chromium ask **Allow hand tracking?** in
   the browser panel before the session starts.
 
+## Optional hand-tracking permission stall (2026-10-26)
+
+With VR Allow and optional `hand-tracking` at Ask, five fresh-profile native
+XR requests stayed pending for eight seconds. Setting only the hands default
+to Block resolved 5/5 requests without hands; Allow resolved 4/4 with hands.
+Effective settings were read back through Chromium settings. These tests used
+trusted input and no CDP permission grants. Removing optional hands also
+resolved 2/2 requests with VR Allow unchanged.
+
+The launcher now sets `profile.default_content_setting_values.vr = 1` and
+`hand_tracking = 2` before startup. It preserves hand-tracking site exceptions,
+skips writes while the profile is running, and writes Preferences atomically
+with mode 0600 under a lock. Required-hand sites need a per-site Allow.
+
+A disposable profile with the proposed Block setting passed three actual
+player XR/Next/re-entry cycles. Next performed full page navigation and ended
+XR; the destination played in 2D before re-entry. This was callback-only
+coverage, without trusted controller input. Video frames, media time and
+stereo AAC decoded bytes advanced while physical speakers stayed muted at
+zero. This isolates a permission hang; it does not establish the cause of the
+reported browser crash or the unidentified silent clip.
+
+Installed verification used the real profile and installed launcher. The
+neutral origin resolved trusted optional-hand XR with 20 valid viewer poses;
+required hands rejected with `NotSupportedError`. The real site retained a
+pre-existing hand-tracking Allow exception and passed three XR/HUD Next
+cycles with that effective permission, without CDP overrides. Its three
+Next destinations used V4L2; decoded video frames and AAC bytes advanced.
+A second launch left live Preferences byte-identical. Systemd/laser code was
+preserved, but the direct launcher branch was used in this run.
+
+[Installed results](verification/xr-permissions-frame-2026-10-26.json) include
+the exact hashes and limits. The initial Opus 5.5 high review attempt hit a
+Claude API rate limit. After automatic resumption, the independent read-only
+review completed against commit `df78b14` and the installed launcher delta.
+It verified preference semantics, preservation, mode 0600, idempotence and
+running-profile behavior. Two low-severity documentation findings are now
+addressed: global defaults reset on idle launch, and review status is current.
+The silent clip remains unidentified. The user clarified that Chromium stays
+open while its view disappears and becomes unresponsive after Next; this
+failure remains unresolved. No FATAL/new core occurred in the earlier bounded
+run. Physical speakers remained muted at zero.
+
 ## Graphics
 
 Chromium's GPU process uses ANGLE on OpenGL, which runs on zink over the
 Turnip Vulkan driver (Adreno 750). Chromium's own Vulkan backend stays off;
 that doesn't stop the session. The OpenXR runtime uses Vulkan.
+
+## Video decoding
+
+Most VR180 and 360 video on the web is HEVC (H.265). Chromium on Linux has
+no software HEVC decoder; it decodes HEVC only on a hardware decoder. Without
+one, an HEVC video plays its sound but shows no picture: the element raises
+no error and `currentTime` advances, but `videoWidth` stays 0 and no frames
+are decoded. `canPlayType()` and `MediaSource.isTypeSupported()` report
+HEVC as unsupported, so players that check pick another format, but many VR sites
+serve HEVC without checking.
+
+Verified on 2026-10-23 (BUILD_ID 20261015.6141207) with the Chromium 156
+build, which had no hardware decoder: H.264 (up to 5760 × 2880) and VP9
+played with frames, while HEVC 1080p, HEVC Main 10 4K and HEVC 7680 × 3840
+played sound with 0 decoded frames.
+
+The Frame's decoder is Qualcomm's `iris` V4L2 driver at `/dev/video-dec0`
+(`/dev/video22`), a stateful decoder for H.264, HEVC and VP9 from 128 × 128
+up to 8192 × 8192. The Frame has no VA-API driver. Steam's own browser
+(`steamwebhelper`) runs with `--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode`,
+so Valve uses this decoder too.
+
+So the build sets `use_v4l2_codec = true` and `use_vaapi = false`, the same
+pair as upstream's `linux-v4l2-codec-rel` try builder. On desktop Linux,
+Chromium looks for V4L2 decoders at `/dev/video0` to `/dev/video255`.
+Hardware decoding is off by default in a build without VA-API, so the
+launcher adds `AcceleratedVideoDecoder` to `--enable-features`.
+
+The flags alone aren't enough. The Frame's decoder is stateful (it parses
+the bitstream itself), so Chromium uses `V4L2StatefulVideoDecoder`, the
+decoder written for Qualcomm Chromebooks. At 157.0.8088.0, and on `main`
+in October 2026, its `Decode()` returns `kUnsupportedCodec` for HEVC, even
+though the device's HEVC profiles are listed as supported.
+`patches/0002-v4l2-stateful-decoder-hevc.patch` handles HEVC the way the
+decoder handles VP9: each `DecoderBuffer` goes to the driver as it is.
+That works because `VideoDecoderPipeline` already converts HEVC to Annex B
+(`needs_bitstream_conversion_`), and media playback hands over one whole
+frame per buffer, which stateful drivers need. H.264 goes through a
+reassembler instead, because some sources split its frames. The patch also:
+
+- gives HEVC 16 input buffers, as H.264 has, and requests 16 MiB buffers
+  above 4K (upstream requests 4 MiB above 1080p, and an 8K keyframe can be
+  larger). The driver may still allocate less.
+- fails the decode when a frame is larger than its input buffer. Upstream
+  `CHECK`s the size, which crashes the GPU process.
+- leaves single-plane P010 out of the output formats. Chromium can't lay it
+  out yet: the first decoded 10-bit frame would fail a `CHECK`. (The
+  Frame's decoder doesn't offer P010 anyway; for 10-bit HEVC it offers only
+  Q10C, see below.)
+- reports a decode error when the decoder can't set up its output (for
+  example, no usable output format) or a frame doesn't fit, and fails later
+  decodes until the player resets. The decoder reports errors only through
+  its decode callbacks, so upstream left playback waiting silently in these
+  cases.
+- stops offering HEVC Main 10 and VP9 profile 2 from V4L2 decoders that
+  take whole frames (stateful ones, like the Frame's). See below.
+
+**Chromium's V4L2 path on this Frame, verified 2026-10-23.** Steam's own
+Chromium, `cefsimple` from `~/.local/share/Steam/steamrtarm64` (CEF on
+Chromium 126), ran the codec probe with
+`--enable-features=PlatformHEVCDecoderSupport,V4L2VideoDecode`. Results:
+
+| Clip | Result |
+|---|---|
+| HEVC 1920 × 1080 | 152 frames decoded |
+| HEVC 7680 × 3840 | 113 frames in 3.8 s |
+| H.264, VP9 | decoded |
+| HEVC Main 10 3840 × 2160 | failed to decode (`Failed to pick an output format`) |
+
+For 8-bit streams the driver offers Q08C, NV12 and NV21 as output. For
+10-bit HEVC it offers only Q10C, Qualcomm's compressed 10-bit format, which
+Chromium can't use. Asking it for NV12 anyway (`ffmpeg -c:v hevc_v4l2m2m`)
+gives frames with the right shapes but wrong colours. So 10-bit HEVC can't
+play on this decoder in Chromium.
+
+Chromium 126 still said `canPlayType()` "probably" for HEVC Main 10. A
+player that trusts that would pick 10-bit HEVC over an H.264 copy and show
+nothing. So the patch stops offering HEVC Main 10, and players fall back.
+VP9 profile 2 goes to Chromium's software VP9 decoder.
+
+**Chromium 157 device verification, 2026-10-24.** Both CI runs
+[39916971445](https://github.com/saphid/chromium-webxr-steam-frame/actions/runs/39916971445)
+and [39934948705](https://github.com/saphid/chromium-webxr-steam-frame/actions/runs/39934948705)
+succeeded. Run B's artifact was installed with the existing laser-touch
+launcher retained and `AcceleratedVideoDecoder` added.
+
+The probe needs `DISPLAY=:0` and `--enable-gpu` with `--headless`; otherwise
+it uses a software GPU and doesn't expose HEVC. With hardware available,
+run B advertises 8-bit HEVC and rejects Main 10 as intended, but fails to
+allocate the input queue: `VIDIOC_REQBUFS` returns `EINVAL`. Upstream's
+stateful decoder calls `SetFormat()` with `gfx::Size()` (0 × 0). A native
+ioctl probe reproduced the failure for both H.264 and HEVC at every tested
+buffer count (2, 4, 8, 16); supplying 1920 × 1080 made all allocations pass.
+
+The coded-size correction, initially patch 0003 and now folded into patch
+0002, passes `config.coded_size()` instead.
+A temporary diagnostic shim that supplied nonzero dimensions decoded HEVC
+1080p (150 frames) and 7680 × 3840 (91 frames); Main 10 remained unsupported.
+That diagnostic used `--no-sandbox --in-process-gpu` so the shim could reach
+the ioctl call; it is evidence for the size mismatch, not verification of
+the rebuilt browser under its normal process setup. Neither flag nor the
+shim is in the installed launcher. The coded-size correction is part
+of patch 0002. Run B's headless GPU probe also returned
+`navigator.xr.isSessionSupported("immersive-vr") === true` under the normal
+process sandbox setup. An immersive session and a real VR180 site still
+need testing.
+
+**Corrected build installed and verified, 2026-10-24.**
+[Run 40060061894](https://github.com/saphid/chromium-webxr-steam-frame/actions/runs/40060061894)
+at [f586f00](https://github.com/saphid/chromium-webxr-steam-frame/commit/f586f00227d6fb1afe26c44e28991f17cb069ea1)
+succeeded. Artifact 12547641202 was 146,203,864 bytes, with SHA-256
+`771b849b76bd0ba133e826e1fad289b2d3e68cb7ac55589953e221cd5af4019e`,
+verified against GitHub's metadata before installation. The existing
+laser-touch/systemd launcher was retained byte-for-byte with
+`OpenXR,AcceleratedVideoDecoder`; Steam shortcut 2349681812 and the original
+156 binary/launcher rollback copies were preserved.
+
+A normal, separate-process browser on `DISPLAY=:0 --ozone-platform=x11`
+passed the clip probe with no shim, `--no-sandbox`, or `--in-process-gpu`:
+
+| Clip | Dimensions | Decoded frames | Decode error |
+|---|---|---|---|
+| HEVC Main | 1920 × 1080 | 152 | none |
+| HEVC Main | 7680 × 3840 | 131 | none |
+| H.264 | 1920 × 1080 | 151 | none |
+| H.264 | 5760 × 2880 | 145 | none |
+| VP9 | 1920 × 1080 | 152 | none |
+
+A second pass drew decoded HEVC frames into a canvas: 1080p decoded 150
+frames and 8K decoded 139, with no errors and thousands of distinct sampled
+colours. The 8K capture was visually checked against a software-decoded
+ffmpeg frame from the same clip. The corrected build also returned
+`{"xr":true,"immersiveVR":true}` in a separate normal-browser WebXR probe.
+Immersive VR180 results and the remaining headset-visibility limit are recorded below.
+
+[Machine-readable results](verification/hevc-frame-2026-10-24.json) and the
+8K decoded-frame capture:
+
+![8K HEVC test pattern decoded and drawn by Chromium on the Frame](verification/hevc-8k-frame-2026-10-24.png)
+
+HEVC Main 10 returned empty `canPlayType()` and false MSE support, as intended.
+The probe explicitly pauses each video, clears its source and calls `load()`
+before the next clip: merely removing a playing element can retain its decoder
+and make the subsequent 8K allocation fail.
+
+Headless mode remains unsuitable for this hardware playback probe. Even with
+`DISPLAY=:0 --enable-gpu`, and with explicit GL or X11 selection, it failed
+at `MailboxVideoFrameConverter`: no shared-image backing factory, followed
+by a GPU restart. These failures are retained as evidence, not counted as
+successful playback. The installed launcher uses the tested normal X11 path.
+Raw results and logs are in the owning steam-frame checkout under
+`artifacts/chromium-xr-hevc-2026-10-24/`.
+
+The initially rate-limited independent review of the coded-size correction
+and recovery workflow later resumed and completed as `claudeAgent` /
+`claude-opus-5-5`, high effort. It found no actionable C++ issue. It reproduced
+a local build resume failure: patch 0003 changed context used by patch 0002's
+reverse-check. The correction is now folded into patch 0002 so re-runs can
+recognize it as applied. The resulting Chromium source is byte-identical.
+The completed one-off run-C recovery job and dispatch input were removed;
+regular multipart builds no longer expose a recovery mode dependent on the
+expiring run-C artifact.
+
+
+### Immersive HEVC VR180 test, 2026-10-24
+
+**First run: partial pass.** Hardware decoding, both XR eye buffers and
+SteamVR submission passed, but final visible headset playback was unverified.
+The follow-up below subsequently verified actual headset pictures and motion. The installed
+binary was unchanged. A real `immersive-vr` session started through a valid
+button gesture, with a temporary profile and the production X11/features/
+seccomp settings. No headless mode, shim, fake XR, `--no-sandbox` or
+`--in-process-gpu` was used.
+
+The fixture was a locally generated, looping 7680 × 3840 HEVC Main 8-bit
+clip at 30 fps: left/right side-by-side, each eye a 180° equirectangular
+hemisphere. It has a synthetic 64 mm stereo baseline, eye labels, grid and
+moving spheres. Each eye was ray-traced at 640 × 640 then upscaled, so this
+proves the 8K decode dimensions and projection path, not native-detail or
+high-bitrate 8K performance. No audio or spatial MP4 metadata; a minimal
+WebXR player supplied the stereo projection. The public three.js video
+example was inspected but is stereo 360°, so no third-party VR180 site
+compatibility is claimed.
+
+- Media events selected `V4L2VideoDecoder` for HEVC 7680 × 3840. Browser
+  playback counters recorded 5,545 video frames, 35 dropped and no reported
+  decode errors; 5,521 video-frame callbacks fired. These are browser
+  playback counters, not an instrumented hardware decode count.
+- WebXR rendered 14,848 frames over 207.4 seconds (71.57 mean frames/s), with
+  two 1728 × 1728 viewports in a 3456 × 1728 framebuffer. Both eyes were
+  drawn on every reported XR frame. Six direct eye-buffer samples showed
+  moving video pixels, correct eye labels and distinct stereo views.
+- SteamVR independently recorded 14,895 submissions from Chromium's XR
+  process. This run included looping and costly readback captures; it is
+  not a controlled performance benchmark.
+- Actual SteamVR headset screenshots remained uniform dark background.
+  Tracking was invalid (`poseValid=false`, result 101 / out of range);
+  WebXR returned identity orientation and emulated position. The mirror API
+  returned `InvalidTexture`. Invalid tracking co-occurred with the blank
+  captures; its role in the failure was not conclusively isolated. Final
+  headset visibility, head-motion behavior and subjective viewing remain
+  unverified. Repeat that check with the headset tracking in its playspace.
+
+The image below samples the actual XR eye buffers, **not the final headset
+compositor output**. It shows six sampled frames, not a real-time recording.
+
+![Sampled motion from both Frame XR eye buffers; final headset visibility unverified](verification/vr180-xr-eye-buffers-2026-10-24.gif)
+
+[Machine-readable VR180 result](verification/vr180-frame-2026-10-24.json) ·
+[Blank final headset capture](verification/vr180-headset-capture-2026-10-24.png).
+Raw evidence is in the steam-frame checkout under
+`artifacts/chromium-xr-vr180-2026-10-24/`. The test was performed by T3's
+`codex` / `gpt-6-astra` worker (completed); the parent checked raw metrics,
+fixture/image hashes and captures. This was runtime verification, not an
+independent code review. Owned processes/profile/staging and lock were
+cleaned up; the installed binary and launcher hashes were unchanged.
+
+
+### Final headset picture verified, 2026-10-24
+
+The follow-up verified actual **SteamVR stereo compositor output** using
+`IVRScreenshots_001`, distinct from the browser eye-buffer readbacks above.
+Two captures at 11:11:24.867 and 11:11:28.998 UTC show the curved grid and
+coloured spheres in both eyes, with the yellow sphere in different positions.
+Native tracking was valid (result 200) and the dashboard was hidden at both
+successful captures. SteamVR submissions increased from 646 to 937.
+
+The same installed binary selected `V4L2VideoDecoder` for the same generated
+7680 × 3840 HEVC Main SBS 180° fixture. The final short repeat drew 933 XR
+frames per eye; browser counters recorded 370 video frames, 9 dropped and
+no playback errors. This confirms picture and sampled motion, not a
+controlled frame-rate benchmark. The preceding short session also passed
+playback (503 browser video frames, 5 dropped).
+
+Tracking remained intermittent. The player initially centered from an
+invalid identity/emulated pose, leaving the scene at the edge of the view
+when tracking recovered. The test player was recentered once on a real,
+non-emulated pose using its existing rotation algorithm. No runtime pose,
+production browser, launcher or persistent profile was modified. Initial
+blank/off-center captures are retained in the raw evidence.
+
+![Two actual SteamVR headset stereo captures showing changed VR180 video content](verification/vr180-headset-motion-2026-10-24.gif)
+
+This GIF alternates **two still captures at 1 fps**; it is not a real-time
+recording or proof of playback smoothness. It supersedes the earlier
+final-headset visibility gap for this generated fixture. Third-party site
+compatibility, native-detail/high-bitrate 8K performance, sustained tracking
+and subjective comfort remain untested.
+
+[Verified headset result](verification/vr180-headset-verified-2026-10-24.json).
+Raw evidence: steam-frame `artifacts/chromium-xr-vr180-worn-2026-10-24/`.
+The `codex` / `gpt-6-astra` test worker completed; the parent inspected both
+final PNGs, checked capture/fixture hashes, raw decoder/tracking/submission
+records and cleanup. Dashboard visibility was restored, owned processes and
+temporary staging/profile were removed, and the shared-device lock released.
+Installed binary and launcher checksums remained unchanged; existing awake
+protection and SteamVR processes were preserved.
 
 ## Panels and the Steam library
 
